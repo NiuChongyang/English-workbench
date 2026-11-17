@@ -10,71 +10,453 @@
   <link rel="manifest" href="./manifest.json">
   <title>我的英语工作台</title>
   <style>
+    :root { --primary: #58cc02; --primary-dark: #46a302; --bg: #f7f7f7; --text: #3c3c3c; --border: #e5e5e5; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", sans-serif; background: #f7f7f7; color: #3c3c3c; padding: 16px; padding-bottom: 80px; max-width: 640px; margin: 0 auto; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", sans-serif; background: var(--bg); color: var(--text); padding: 16px; padding-bottom: 70px; max-width: 640px; margin: 0 auto; -webkit-tap-highlight-color: transparent; }
     h1 { font-size: 22px; margin-bottom: 4px; }
     .sub { color: #777; font-size: 13px; margin-bottom: 20px; }
     .card { background: #fff; border-radius: 16px; padding: 18px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
-    .card h2 { font-size: 16px; margin-bottom: 12px; }
-    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 12px 18px; border-radius: 12px; border: none; font-size: 15px; font-weight: 600; cursor: pointer; text-decoration: none; }
-    .btn-primary { background: #58cc02; color: #fff; width: 100%; }
-    .btn-outline { background: transparent; border: 1.5px solid #ddd; color: #555; font-size: 13px; padding: 8px 14px; }
+    .card h2 { font-size: 16px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+    
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 12px 18px; border-radius: 12px; border: none; font-size: 15px; font-weight: 600; cursor: pointer; text-decoration: none; transition: 0.1s; color: var(--text); }
+    .btn-primary { background: var(--primary); color: #fff; box-shadow: 0 4px 0 var(--primary-dark); }
+    .btn-primary:active { transform: translateY(2px); box-shadow: 0 2px 0 var(--primary-dark); }
+    .btn-outline { background: transparent; border: 2px solid var(--border); color: #777; font-size: 14px; padding: 10px 16px; border-radius: 12px; }
+    
+    /* 仪表盘 */
+    .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+    .stat-box { background: #f0f7ea; padding: 12px; border-radius: 12px; text-align: center; }
+    .stat-num { font-size: 20px; font-weight: bold; color: var(--primary); }
+    .stat-label { font-size: 12px; color: #666; margin-top: 4px; }
+
+    /* 题目区 */
+    #quiz-panel { display: none; }
+    .progress-bar { height: 12px; background: #e5e5e5; border-radius: 6px; margin-bottom: 20px; overflow: hidden; }
+    .progress-fill { height: 100%; background: var(--primary); width: 0%; transition: 0.3s; }
+    .question-type { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+    .question-text { font-size: 22px; font-weight: bold; margin-bottom: 20px; line-height: 1.4; }
+    .options-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+    .opt-btn { padding: 14px; border: 2px solid var(--border); border-radius: 12px; font-size: 16px; text-align: left; background: #fff; cursor: pointer; transition: 0.1s; }
+    .opt-btn:active { background: #f0f0f0; }
+    .opt-btn.correct { background: #d7ffb8; border-color: var(--primary); color: var(--primary-dark); }
+    .opt-btn.wrong { background: #ffdfe0; border-color: #ff4b4b; color: #ea2b2b; }
+    .opt-btn.disabled { pointer-events: none; }
+    
+    .input-area { display: flex; gap: 10px; margin-bottom: 15px; }
+    .input-area input { flex: 1; padding: 14px; border: 2px solid var(--border); border-radius: 12px; font-size: 18px; outline: none; }
+    .input-area input:focus { border-color: var(--primary); }
+    .mic-btn { width: 54px; height: 54px; border-radius: 50%; background: var(--primary); color: white; border: none; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 0 var(--primary-dark); }
+    .mic-btn.recording { background: #ff4b4b; animation: pulse 1s infinite; }
+    @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+
+    /* 解析区 */
+    #feedback-panel { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #eee; padding: 20px; border-radius: 20px 20px 0 0; box-shadow: 0 -4px 12px rgba(0,0,0,0.1); z-index: 100; }
+    .feedback-title { font-size: 18px; font-weight: bold; margin-bottom: 10px; }
+    .feedback-title.correct { color: var(--primary); }
+    .feedback-title.wrong { color: #ff4b4b; }
+    .feedback-grammar { background: #f7f7f7; padding: 12px; border-radius: 10px; font-size: 14px; line-height: 1.6; color: #555; margin-bottom: 15px; border-left: 4px solid var(--primary); }
+
+    /* 查词区 */
     .search-box { display: flex; gap: 8px; }
-    .search-box input { flex: 1; padding: 12px 14px; border: 1.5px solid #e0e0e0; border-radius: 12px; font-size: 16px; outline: none; }
-    .search-box input:focus { border-color: #58cc02; }
-    .search-box button { padding: 12px 20px; background: #58cc02; color: #fff; border: none; border-radius: 12px; font-weight: 600; cursor: pointer; }
-    #result-area { margin-top: 14px; font-size: 14px; line-height: 1.7; }
-    .phonetic { color: #666; font-size: 14px; margin: 4px 0 10px; }
-    .meaning { margin: 8px 0; padding-left: 12px; border-left: 3px solid #58cc02; }
-    .meaning b { color: #3a8a00; }
-    .synonyms { color: #3a8a00; font-size: 13px; margin-top: 8px; }
-    .sentence { background: #f0f7ea; padding: 12px 14px; border-radius: 10px; margin-bottom: 8px; font-size: 14px; line-height: 1.6; }
-    .sentence small { color: #888; display: block; margin-top: 4px; }
-    .lib-item { display: flex; justify-content: space-between; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid #f0f0f0; font-size: 14px; }
-    .lib-item:last-child { border-bottom: none; }
-    .lib-word { font-weight: 600; }
-    .lib-actions button { background: none; border: none; font-size: 12px; cursor: pointer; color: #999; padding: 2px 4px; }
-    .empty { color: #aaa; font-size: 13px; text-align: center; padding: 16px 0; }
-    .footer { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #eee; display: flex; justify-content: space-around; padding: 10px 0 max(10px, env(safe-area-inset-bottom)); }
-    .footer a { color: #999; text-decoration: none; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; }
-    .loading { color: #999; font-size: 13px; }
-    .error { color: #c0392b; font-size: 13px; }
+    .search-box input { flex: 1; padding: 12px; border: 2px solid var(--border); border-radius: 12px; font-size: 16px; outline: none; }
+    .search-box button { padding: 0 20px; background: var(--primary); color: #fff; border: none; border-radius: 12px; font-weight: 600; cursor: pointer; }
+    #search-result { margin-top: 14px; font-size: 14px; line-height: 1.7; display: none; background: #fafafa; padding: 12px; border-radius: 12px; }
+    
+    /* 底部导航 */
+    .footer { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #eee; display: flex; justify-content: space-around; padding: 10px 0 max(10px, env(safe-area-inset-bottom)); z-index: 50; }
+    .footer a { color: #999; text-decoration: none; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; font-weight: 500; cursor: pointer; }
+    .footer a.active { color: var(--primary); }
   </style>
 </head>
 <body>
-  <h1>📚 我的英语工作台</h1>
-  <p class="sub">多邻国 · 查词 · 短句 · 学习库</p>
 
-  <div class="card">
-    <h2>🦉 多邻国</h2>
-    <p style="font-size:13px;color:#777;margin-bottom:12px;">进度与 App 自动同步</p>
-    <a href="https://www.duolingo.com" target="_blank" class="btn btn-primary">打开多邻国网页版</a>
-  </div>
+  <!-- 1. 主页区 -->
+  <div id="home-view">
+    <h1>📚 我的英语工作台</h1>
+    <p class="sub">听 · 说 · 读 · 写 全方位训练</p>
 
-  <div class="card">
-    <h2>🔍 查单词</h2>
-    <div class="search-box">
-      <input id="word-input" placeholder="输入英文单词…" autocomplete="off" autocapitalize="off" spellcheck="false">
-      <button onclick="searchWord()">查询</button>
+    <div class="card">
+      <h2>🏆 学习仪表盘</h2>
+      <div class="stats-grid">
+        <div class="stat-box"><div class="stat-num" id="stat-mastered">0</div><div class="stat-label">已掌握</div></div>
+        <div class="stat-box"><div class="stat-num" id="stat-wrong">0</div><div class="stat-label">错题待复习</div></div>
+        <div class="stat-box"><div class="stat-num" id="stat-total">0</div><div class="stat-label">题库总数</div></div>
+        <div class="stat-box"><div class="stat-num" id="stat-score">0</div><div class="stat-label">累计得分</div></div>
+      </div>
+      <button class="btn btn-primary" style="width:100%; margin-top:10px;" onclick="startDailyQuiz()">🚀 开始今日训练</button>
+      <button class="btn btn-outline" style="width:100%; margin-top:10px; color:#ff4b4b; border-color:#ffdfe0;" onclick="startWrongReview()">🔥 复习错题本 (<span id="btn-wrong-count">0</span>)</button>
     </div>
-    <div id="result-area"></div>
-  </div>
 
-  <div class="card">
-    <h2>💬 日常短句</h2>
-    <div id="sentence-list"></div>
-    <button class="btn btn-outline" style="margin-top:10px;" onclick="nextSentence()">换一句</button>
-  </div>
-
-  <div class="card">
-    <h2>📖 我的学习库 <span id="lib-count" style="font-weight:400;font-size:13px;color:#999;"></span></h2>
-    <div id="library-list"><p class="empty">搜索单词后会自动出现在这里</p></div>
-    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
-      <button class="btn btn-outline" onclick="exportLibrary()">导出备份</button>
-      <label class="btn btn-outline" style="cursor:pointer;">导入备份<input type="file" accept=".json" style="display:none;" onchange="importLibrary(event)"></label>
-      <button class="btn btn-outline" style="color:#c0392b;border-color:#f5c6cb;" onclick="clearLibrary()">清空</button>
+    <div class="card">
+      <h2>🔍 添加学习内容</h2>
+      <p style="font-size:12px;color:#888;margin-bottom:10px;">输入英文或中文，查询后自动加入题库</p>
+      <div class="search-box">
+        <input id="search-input" placeholder="例如：apple 或 苹果" autocomplete="off">
+        <button onclick="searchAndAdd()">查询</button>
+      </div>
+      <div id="search-result"></div>
     </div>
   </div>
 
+  <!-- 2. 答题区 -->
+  <div id="quiz-view" class="card" style="display:none;">
+    <div class="progress-bar"><div class="progress-fill" id="q-progress"></div></div>
+    <div class="question-type" id="q-type">选择题</div>
+    <div class="question-text" id="q-text">Loading...</div>
+    
+    <div id="q-options" class="options-grid"></div>
+    
+    <div id="q-input-area" class="input-area" style="display:none;">
+      <input type="text" id="q-input" placeholder="输入英文..." autocomplete="off" autocapitalize="off" spellcheck="false">
+      <button class="btn btn-primary" onclick="submitInput()">检查</button>
+    </div>
+
+    <div id="q-speak-area" style="display:none; text-align:center; margin-top:20px;">
+      <p style="font-size:14px;color:#666;margin-bottom:15px;">点击麦克风，大声读出上方句子</p>
+      <button class="mic-btn" id="mic-btn" onclick="toggleRecord()">🎙️</button>
+    </div>
+
+    <button class="btn btn-outline" style="width:100%; margin-top:20px;" onclick="quitQuiz()">退出训练</button>
+  </div>
+
+  <!-- 3. 解析反馈区 (弹窗) -->
+  <div id="feedback-panel">
+    <div class="feedback-title" id="fb-title">回答正确</div>
+    <div class="feedback-grammar" id="fb-grammar">语法解析...</div>
+    <button class="btn btn-primary" style="width:100%;" onclick="nextQuestion()">继续 (Next)</button>
+  </div>
+
+  <!-- 底部导航 -->
   <div class="footer">
-    <a href="#" onclick="document.getElementById('word-input').focus()
+    <a href="#" class="active" onclick="showHome(); return false;">🏠 主页</a>
+    <a href="#" onclick="startDailyQuiz(); return false;">🎮 训练</a>
+    <a href="#" onclick="startWrongReview(); return false;">📝 错题本</a>
+  </div>
+
+  <script>
+    // ================= 核心题库与数据 =================
+    // 默认内置题库（包含语法解析解析）
+    const DEFAULT_LIBRARY = [
+      { id: 1, en: "I'm learning English.", zh: "我正在学英语。", grammar: "现在进行时（be动词 + doing），表示此刻正在进行的动作。" },
+      { id: 2, en: "Could you say that again?", zh: "你能再说一遍吗？", grammar: "Could 引导的委婉请求句型，后接动词原形。" },
+      { id: 3, en: "Nice to meet you.", zh: "很高兴认识你。", grammar: "初次见面的固定表达。'to meet' 作动词不定式。" },
+      { id: 4, en: "Where is the restroom?", zh: "洗手间在哪里？", grammar: "特殊疑问词 Where 引导的问句，询问地点。" },
+      { id: 5, en: "I don't understand.", zh: "我不明白。", grammar: "一般现在时的否定形式（don't + 动词原形）。" },
+      { id: 6, en: "How much is this?", zh: "这个多少钱？", grammar: "How much 询问价格，后接 be 动词 is。" },
+      { id: 7, en: "happy", zh: "快乐的", grammar: "形容词，常用于系动词（如 be, feel）之后作表语。" },
+      { id: 8, en: "beautiful", zh: "美丽的", grammar: "多音节形容词，比较级需要加 more，最高级加 most。" },
+      { id: 9, en: "family", zh: "家庭", grammar: "集合名词，作主语时，若强调整体谓语用单数，强调成员谓语用复数。" },
+      { id: 10, en: "money", zh: "钱", grammar: "不可数名词，不能用 a/an 修饰，表示“一笔钱”用 a sum of money。" }
+    ];
+
+    // 从本地存储加载用户查的词
+    let userVocabulary = JSON.parse(localStorage.getItem('user_vocab') || '[]');
+    let wrongQuestions = JSON.parse(localStorage.getItem('wrong_questions') || '[]');
+    let stats = JSON.parse(localStorage.getItem('user_stats') || '{"mastered": 0, "score": 0}');
+
+    // ================= 视图切换 =================
+    function showHome() {
+      document.getElementById('home-view').style.display = 'block';
+      document.getElementById('quiz-view').style.display = 'none';
+      document.getElementById('feedback-panel').style.display = 'none';
+      updateDashboard();
+    }
+
+    function showQuiz() {
+      document.getElementById('home-view').style.display = 'none';
+      document.getElementById('quiz-view').style.display = 'block';
+      document.getElementById('feedback-panel').style.display = 'none';
+    }
+
+    function updateDashboard() {
+      const allLib = [...DEFAULT_LIBRARY, ...userVocabulary];
+      document.getElementById('stat-mastered').textContent = stats.mastered;
+      document.getElementById('stat-wrong').textContent = wrongQuestions.length;
+      document.getElementById('stat-total').textContent = allLib.length;
+      document.getElementById('stat-score').textContent = stats.score;
+      document.getElementById('btn-wrong-count').textContent = wrongQuestions.length;
+    }
+
+    // ================= 查词与添加 =================
+    async function searchAndAdd() {
+      const raw = document.getElementById('search-input').value.trim();
+      if (!raw) return;
+      const resDiv = document.getElementById('search-result');
+      resDiv.style.display = 'block';
+      resDiv.innerHTML = '查询中...';
+
+      const isChinese = /[\u4e00-\u9fa5]/.test(raw);
+      const langpair = isChinese ? 'zh-CN|en' : 'en|zh-CN';
+      
+      try {
+        const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(raw)}&langpair=${langpair}`);
+        const data = await res.json();
+        const translated = data.responseData.translatedText;
+        
+        if (!translated || translated.toLowerCase() === raw.toLowerCase()) throw new Error('Not found');
+
+        let enWord = isChinese ? translated : raw;
+        let zhWord = isChinese ? raw : translated;
+
+        // 添加到用户词库
+        const newItem = {
+          id: Date.now(),
+          en: enWord,
+          zh: zhWord,
+          grammar: `【查词记录】${enWord} 的中文释义是“${zhWord}”。（用户添加，系统暂无详细语法解析，可在训练中熟悉用法）`
+        };
+        
+        // 去重
+        if(![...DEFAULT_LIBRARY, ...userVocabulary].some(item => item.en.toLowerCase() === enWord.toLowerCase())) {
+          userVocabulary.push(newItem);
+          localStorage.setItem('user_vocab', JSON.stringify(userVocabulary));
+          resDiv.innerHTML = `✅ 已加入题库：<b>${enWord}</b> (${zhWord})<br><span style="font-size:12px;color:#666;">之后在训练中会考到这个词</span>`;
+        } else {
+          resDiv.innerHTML = `✅ 这个词已经在题库中啦：<b>${enWord}</b> (${zhWord})`;
+        }
+        updateDashboard();
+      } catch (e) {
+        resDiv.innerHTML = '❌ 查询失败，请尝试其他词或检查网络。';
+      }
+    }
+
+    // ================= 答题逻辑 =================
+    let currentQueue = [];
+    let currentQ = null;
+    let qType = ''; // select_en, select_zh, spell, speak
+
+    function startDailyQuiz() {
+      let allLib = [...DEFAULT_LIBRARY, ...userVocabulary];
+      // 打乱题库，随机选 10 个
+      currentQueue = allLib.sort(() => Math.random() - 0.5).slice(0, 10);
+      if(currentQueue.length === 0) return alert('题库为空，请先查几个词！');
+      showQuiz();
+      loadQuestion();
+    }
+
+    function startWrongReview() {
+      if (wrongQuestions.length === 0) return alert('太棒了，目前没有错题需要复习！');
+      currentQueue = [...wrongQuestions];
+      wrongQuestions = []; // 清空错题，重新答，答错会再加进去
+      localStorage.setItem('wrong_questions', JSON.stringify(wrongQuestions));
+      showQuiz();
+      loadQuestion();
+    }
+
+    function loadQuestion() {
+      if (currentQueue.length === 0) {
+        alert(`🎉 训练完成！\n本次得分已累计。`);
+        showHome();
+        return;
+      }
+
+      currentQ = currentQueue.shift();
+      document.getElementById('feedback-panel').style.display = 'none';
+      document.getElementById('q-input').value = '';
+      
+      // 更新进度条
+      const total = currentQueue.length + 1;
+      const progress = ((10 - total) / 10) * 100; // 假设最多10题
+      document.getElementById('q-progress').style.width = `${Math.max(10, progress)}%`;
+
+      // 随机决定题型 (选择题、拼写、口语)
+      const rand = Math.random();
+      if (rand < 0.4) {
+        // 选择题 (交替英译中或中译英)
+        qType = Math.random() > 0.5 ? 'select_zh' : 'select_en';
+        renderSelectQuestion();
+      } else if (rand < 0.8) {
+        // 拼写题 (听音或看中文拼英文)
+        qType = 'spell';
+        renderSpellQuestion();
+      } else {
+        // 口语题 (朗读英文)
+        qType = 'speak';
+        renderSpeakQuestion();
+      }
+    }
+
+    // 渲染：选择题
+    function renderSelectQuestion() {
+      document.getElementById('q-type').textContent = qType === 'select_zh' ? '英译中 (选择正确的意思)' : '中译英 (选择正确的单词)';
+      document.getElementById('q-text').textContent = qType === 'select_zh' ? currentQ.en : currentQ.zh;
+      
+      const optsDiv = document.getElementById('q-options');
+      optsDiv.style.display = 'grid';
+      document.getElementById('q-input-area').style.display = 'none';
+      document.getElementById('q-speak-area').style.display = 'none';
+
+      // 生成干扰项
+      let allLib = [...DEFAULT_LIBRARY, ...userVocabulary];
+      let options = [currentQ];
+      while(options.length < 4 && allLib.length > options.length) {
+        let randomItem = allLib[Math.floor(Math.random() * allLib.length)];
+        if(!options.find(o => o.en === randomItem.en)) options.push(randomItem);
+      }
+      options.sort(() => Math.random() - 0.5);
+
+      optsDiv.innerHTML = '';
+      options.forEach(opt => {
+        const btn = document.createElement('button');
+        btn.className = 'opt-btn';
+        btn.textContent = qType === 'select_zh' ? opt.zh : opt.en;
+        btn.onclick = () => checkAnswer(btn, opt.en === currentQ.en);
+        optsDiv.appendChild(btn);
+      });
+    }
+
+    // 渲染：拼写题
+    function renderSpellQuestion() {
+      document.getElementById('q-type').textContent = '听音拼写 (根据发音/释义写出英文)';
+      document.getElementById('q-text').innerHTML = `${currentQ.zh} <button onclick="playAudio('${currentQ.en}')" style="background:none;border:none;font-size:20px;cursor:pointer;">🔊</button>`;
+      
+      document.getElementById('q-options').style.display = 'none';
+      document.getElementById('q-input-area').style.display = 'flex';
+      document.getElementById('q-speak-area').style.display = 'none';
+      playAudio(currentQ.en); // 自动读一次
+    }
+
+    // 渲染：口语题
+    function renderSpeakQuestion() {
+      document.getElementById('q-type').textContent = '口语跟读 (大声朗读英文)';
+      document.getElementById('q-text').innerHTML = `${currentQ.en} <button onclick="playAudio('${currentQ.en}')" style="background:none;border:none;font-size:20px;cursor:pointer;">🔊</button>`;
+      
+      document.getElementById('q-options').style.display = 'none';
+      document.getElementById('q-input-area').style.display = 'none';
+      document.getElementById('q-speak-area').style.display = 'block';
+      playAudio(currentQ.en);
+    }
+
+    // 语音播报 (TTS)
+    function playAudio(text) {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'en-US';
+        utterance.rate = 0.85; // 稍微慢一点适合学习
+        window.speechSynthesis.speak(utterance);
+      }
+    }
+
+    // 拼写题提交
+    function submitInput() {
+      const val = document.getElementById('q-input').value.trim().toLowerCase();
+      if (!val) return;
+      checkAnswer(null, val === currentQ.en.toLowerCase());
+    }
+
+    // 口语识别 (STT)
+    let recognition = null;
+    let isRecording = false;
+    function toggleRecord() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        return alert('当前浏览器不支持语音识别。建议在安卓版 Chrome 或电脑 Chrome 中使用。');
+      }
+
+      if (isRecording) {
+        recognition.stop();
+        return;
+      }
+
+      recognition = new SpeechRecognition();
+      recognition.lang = 'en-US';
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        isRecording = true;
+        document.getElementById('mic-btn').classList.add('recording');
+      };
+
+      recognition.onresult = (event) => {
+        const speechResult = event.results[0][0].transcript.toLowerCase();
+        document.getElementById('q-text').innerHTML += `<br><span style="font-size:14px;color:#666;">你说的：${speechResult}</span>`;
+        // 简单的相似度判断（忽略大小写，去掉标点）
+        const target = currentQ.en.toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()]/g,"");
+        const spoken = speechResult.replace(/[.,/#!$%^&*;:{}=\-_`~()]/g,"");
+        checkAnswer(null, spoken.includes(target) || target.includes(spoken));
+      };
+
+      recognition.onerror = (e) => {
+        alert('录音失败，请检查麦克风权限。');
+        stopRecordUI();
+      };
+
+      recognition.onend = () => {
+        stopRecordUI();
+      };
+
+      recognition.start();
+    }
+
+    function stopRecordUI() {
+      isRecording = false;
+      document.getElementById('mic-btn').classList.remove('recording');
+    }
+
+    // ================= 答案判定与解析 =================
+    function checkAnswer(btn, isCorrect) {
+      // 禁用 UI
+      document.getElementById('q-options').style.pointerEvents = 'none';
+      document.getElementById('q-input-area').style.pointerEvents = 'none';
+      if (btn) {
+        if (isCorrect) btn.classList.add('correct');
+        else btn.classList.add('wrong');
+      }
+
+      // 高亮正确答案
+      if (qType.startsWith('select')) {
+        const btns = document.querySelectorAll('.opt-btn');
+        btns.forEach(b => {
+          const text = b.textContent;
+          if (text === (qType === 'select_zh' ? currentQ.zh : currentQ.en)) {
+            b.classList.add('correct');
+          }
+        });
+      }
+
+      // 显示底部解析
+      const fbPanel = document.getElementById('feedback-panel');
+      const fbTitle = document.getElementById('fb-title');
+      const fbGrammar = document.getElementById('fb-grammar');
+
+      fbPanel.style.display = 'block';
+      if (isCorrect) {
+        fbTitle.textContent = '✅ 回答正确';
+        fbTitle.className = 'feedback-title correct';
+        stats.score += 10;
+        stats.mastered++;
+      } else {
+        fbTitle.textContent = '❌ 回答错误';
+        fbTitle.className = 'feedback-title wrong';
+        // 加入错题本
+        if (!wrongQuestions.find(q => q.en === currentQ.en)) {
+          wrongQuestions.push(currentQ);
+          localStorage.setItem('wrong_questions', JSON.stringify(wrongQuestions));
+        }
+      }
+      localStorage.setItem('user_stats', JSON.stringify(stats));
+
+      // 显示语法解析（错因分析）
+      fbGrammar.innerHTML = `<b>正确答案：</b>${currentQ.en} (${currentQ.zh})<br><br><b>💡 语法/要点解析：</b><br>${currentQ.grammar}`;
+    }
+
+    function nextQuestion() {
+      document.getElementById('feedback-panel').style.display = 'none';
+      document.getElementById('q-options').style.pointerEvents = 'auto';
+      document.getElementById('q-input-area').style.pointerEvents = 'auto';
+      loadQuestion();
+    }
+
+    function quitQuiz() {
+      if(confirm('确定要退出吗？当前进度将丢失。')) {
+        showHome();
+      }
+    }
+
+    // 初始化
+    updateDashboard();
+  </script>
+</body>
+</html>
