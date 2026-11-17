@@ -67,7 +67,7 @@
     /* 单词点击样式与提示框 */
     .clickable-word { border-bottom: 1px dashed #aaa; cursor: pointer; padding: 0 1px; }
     .clickable-word:active { background: #e8f5e0; }
-    #word-popup { display: none; position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 12px 20px; border-radius: 24px; z-index: 200; font-size: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); text-align: center; min-width: 150px; }
+    #word-popup { display: none; position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 12px 20px; border-radius: 24px; z-index: 200; font-size: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); text-align: center; min-width: 150px; max-width: 90%; }
     #word-popup b { color: #58cc02; font-size: 18px; }
 
     /* 底部导航 */
@@ -99,9 +99,9 @@
 
     <div class="card">
       <h2>🔍 添加学习内容</h2>
-      <p style="font-size:12px;color:#888;margin-bottom:10px;">输入英文/中文（支持句子），查询后自动加入题库</p>
+      <p style="font-size:12px;color:#888;margin-bottom:10px;">输入英文/中文，查看词性、变形并加入题库</p>
       <div class="search-box">
-        <input id="search-input" placeholder="例如：apple 或 我正在学英语" autocomplete="off">
+        <input id="search-input" placeholder="例如：apple 或 苹果" autocomplete="off">
         <button onclick="searchAndAdd()">查询</button>
       </div>
       <div id="search-result"></div>
@@ -161,7 +161,7 @@
     let userVocabulary = JSON.parse(localStorage.getItem('user_vocab') || '[]');
     let wrongQuestions = JSON.parse(localStorage.getItem('wrong_questions') || '[]');
     let stats = JSON.parse(localStorage.getItem('user_stats') || '{"mastered": 0, "score": 0}');
-    let wordCache = {}; // 缓存单词翻译，提高点击速度
+    let wordCache = {}; // 缓存单词翻译
 
     // ================= 视图切换 =================
     function showHome() {
@@ -187,62 +187,88 @@
     }
 
     // ================= 语音朗读功能 =================
-    function speak(text) {
+    function speak(text, lang = 'en-US') {
       if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel(); // 停止上一次的播放
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'en-US';
-        utterance.rate = 0.85; // 稍微慢一点，便于听清
+        window.speechSynthesis.cancel();
+        // 清理文本中的特殊字符，避免影响朗读
+        const cleanText = text.replace(/[^a-zA-Z0-9\u4e00-\u9fa5\s',.!?]/g, '');
+        const utterance = new SpeechSynthesisUtterance(cleanText);
+        utterance.lang = lang;
+        utterance.rate = 0.85;
         window.speechSynthesis.speak(utterance);
-      } else {
-        alert('当前浏览器不支持语音播报');
       }
     }
 
-    // ================= 点击单词查意功能 =================
-    // 将句子拆分成可点击的单词
+    // ================= 双向点击查义功能 =================
+    // 同时匹配中文和英文
     function wrapWords(text) {
-      return text.replace(/([a-zA-Z']+)/g, '<span class="clickable-word" onclick="clickWord(event, \'$1\')">$1</span>');
+      // 先匹配英文（包含缩写），再匹配中文
+      let html = text.replace(/([a-zA-Z']+)/g, '<span class="clickable-word" onclick="clickWord(event, \'$1\', \'en\')">$1</span>');
+      html = html.replace(/([\u4e00-\u9fa5]+)/g, '<span class="clickable-word" onclick="clickWord(event, \'$1\', \'zh\')">$1</span>');
+      return html;
     }
 
-    async function clickWord(e, word) {
+    async function clickWord(e, word, type) {
       e.stopPropagation();
-      speak(word); // 点击立刻发音
-
+      
       const popup = document.getElementById('word-popup');
       popup.style.display = 'block';
       
-      const cleanWord = word.toLowerCase().replace(/[^a-z']/g, '');
+      const cleanWord = word.replace(/[^a-zA-Z\u4e00-\u9fa5]/g, '');
+      if(!cleanWord) return;
+
+      // 播放语音
+      if (type === 'en') {
+        speak(cleanWord, 'en-US');
+      } else {
+        speak(cleanWord, 'zh-CN');
+      }
+
+      // 如果是常见缩写，做个映射修复
+      let lookupWord = cleanWord;
+      if(lookupWord === "I'm" || lookupWord === "im") lookupWord = "I am";
+      if(lookupWord === "it's" || lookupWord === "its") lookupWord = "it is";
+      if(lookupWord === "don't") lookupWord = "do not";
+      if(lookupWord === "can't") lookupWord = "cannot";
       
-      // 如果本地缓存有，直接秒出
-      if (wordCache[cleanWord]) {
-        popup.innerHTML = `<b>${cleanWord}</b> 🔊<br>${wordCache[cleanWord]}`;
+      const cacheKey = type + '_' + lookupWord;
+      if (wordCache[cacheKey]) {
+        popup.innerHTML = `<b>${cleanWord}</b> 🔊<br>${wordCache[cacheKey]}`;
         return;
       }
       
       popup.innerHTML = `<b>${cleanWord}</b> 查询中...`;
       
       try {
-        const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(cleanWord)}&langpair=en|zh-CN`);
-        const data = await res.json();
-        let zh = data.responseData.translatedText;
-        if (!zh || zh.toLowerCase() === cleanWord) zh = "暂无翻译"; 
+        let zhText = "";
+        if (type === 'en') {
+          // 英文查中文
+          const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(lookupWord)}&langpair=en|zh-CN`);
+          const data = await res.json();
+          zhText = data.responseData.translatedText;
+          if (!zhText || zhText.toLowerCase() === lookupWord) zhText = "暂无翻译";
+        } else {
+          // 中文查英文
+          const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(lookupWord)}&langpair=zh-CN|en`);
+          const data = await res.json();
+          zhText = data.responseData.translatedText;
+          if (!zhText || zhText === lookupWord) zhText = "暂无翻译";
+        }
         
-        wordCache[cleanWord] = zh;
-        popup.innerHTML = `<b>${cleanWord}</b> 🔊<br>${zh}`;
+        wordCache[cacheKey] = zhText;
+        popup.innerHTML = `<b>${cleanWord}</b> 🔊<br>${zhText}`;
       } catch(err) {
         popup.innerHTML = `<b>${cleanWord}</b><br>网络异常，查询失败`;
       }
     }
 
-    // 点击屏幕其他地方关闭弹窗
     document.body.addEventListener('click', function(e) {
       if (e.target.id !== 'word-popup' && !e.target.classList.contains('clickable-word')) {
         document.getElementById('word-popup').style.display = 'none';
       }
     });
 
-    // ================= 查词与添加 =================
+    // ================= 查词与添加 (全能词典) =================
     async function searchAndAdd() {
       const raw = document.getElementById('search-input').value.trim();
       if (!raw) return;
@@ -251,46 +277,133 @@
       resDiv.innerHTML = '查询中...';
 
       const isChinese = /[\u4e00-\u9fa5]/.test(raw);
-      const langpair = isChinese ? 'zh-CN|en' : 'en|zh-CN';
       
       try {
-        const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(raw)}&langpair=${langpair}`);
-        const data = await res.json();
-        const translated = data.responseData.translatedText;
+        let resultHtml = '';
         
-        if (!translated || translated.toLowerCase() === raw.toLowerCase()) throw new Error('Not found');
+        if (isChinese) {
+          // 中文查英文，使用 MyMemory 获取多个对应词
+          const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(raw)}&langpair=zh-CN|en`);
+          const data = await res.json();
+          
+          let enWords = new Set();
+          if (data.responseData && data.responseData.translatedText) {
+             enWords.add(data.responseData.translatedText);
+          }
+          if (data.matches) {
+            data.matches.forEach(m => {
+              if (m.translation && m.translation.length > 1) {
+                enWords.add(m.translation.toLowerCase());
+              }
+            });
+          }
+          
+          if (enWords.size === 0) throw new Error('Not found');
 
-        let enText = isChinese ? translated : raw;
-        let zhText = isChinese ? raw : translated;
+          resultHtml = `<div style="margin-bottom:8px;">✅ 找到以下常用表达：</div>`;
+          
+          Array.from(enWords).slice(0, 6).forEach((enText, index) => {
+            const newItem = {
+              id: Date.now() + index,
+              en: enText,
+              zh: raw,
+              grammar: `【查词记录】${enText} 的中文释义是“${raw}”。`
+            };
 
-        const newItem = {
-          id: Date.now(),
-          en: enText,
-          zh: zhText,
-          grammar: `【查词记录】${enText} 的中文释义是“${zhText}”。`
-        };
-        
-        if(![...DEFAULT_LIBRARY, ...userVocabulary].some(item => item.en.toLowerCase() === enText.toLowerCase())) {
-          userVocabulary.push(newItem);
-          localStorage.setItem('user_vocab', JSON.stringify(userVocabulary));
-          resDiv.innerHTML = `
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <div>✅ 已加入题库：<b>${enText}</b> (${zhText})</div>
-              <button class="btn" onclick="speak('${enText}')" style="padding:4px 8px; font-size:18px; background:#e8f5e0; color:#3a8a00;">🔊</button>
-            </div>
-            <div style="font-size:12px;color:#666;margin-top:6px;">之后在训练中会考到这个词/句</div>
-          `;
+            const isExist = [...DEFAULT_LIBRARY, ...userVocabulary].some(item => item.en.toLowerCase() === enText.toLowerCase());
+            
+            if (!isExist) {
+              userVocabulary.push(newItem);
+              localStorage.setItem('user_vocab', JSON.stringify(userVocabulary));
+            }
+
+            resultHtml += `
+              <div style="display:flex; justify-content:space-between; align-items:center; background:#fff; padding:8px; border-radius:8px; margin-bottom:6px; border:1px solid #eee;">
+                <div>
+                  <b>${enText}</b> (${raw})
+                  ${isExist ? '<span style="font-size:12px;color:#999;">(已在题库)</span>' : '<span style="font-size:12px;color:#58cc02;">(新加入)</span>'}
+                </div>
+                <button class="btn" onclick="speak('${enText}')" style="padding:4px 8px; font-size:18px; background:#e8f5e0; color:#3a8a00;">🔊</button>
+              </div>
+            `;
+          });
         } else {
-          resDiv.innerHTML = `
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <div>✅ 已经在题库中：<b>${enText}</b> (${zhText})</div>
-              <button class="btn" onclick="speak('${enText}')" style="padding:4px 8px; font-size:18px; background:#e8f5e0; color:#3a8a00;">🔊</button>
+          // 英文查中文，使用有道接口获取丰富释义、词性、变形
+          const res = await fetch(`https://dict.youdao.com/jsonapi?q=${encodeURIComponent(raw)}`);
+          const data = await res.json();
+          
+          let meaningsHtml = '';
+          let finalZh = [];
+          
+          // 解析词性与释义
+          if (data.ec && data.ec.word && data.ec.word.trs) {
+            data.ec.word.trs.forEach(tr => {
+              if (tr.tr && tr.tr[0] && tr.tr[0].l && tr.tr[0].l.i) {
+                let pos = tr.pos || ''; 
+                let meaning = tr.tr[0].l.i[0] || '';
+                if(pos || meaning) {
+                  meaningsHtml += `<div style="margin-bottom:4px;"><span style="color:#58cc02; font-weight:bold; margin-right:6px;">${pos}</span>${meaning}</div>`;
+                  finalZh.push(`${pos} ${meaning}`);
+                }
+              }
+            });
+          }
+
+          // 解析词形变化 (复数、过去式等)
+          let wfsHtml = '';
+          if (data.ec && data.ec.word && data.ec.word.wfs) {
+            wfsHtml = `<div style="margin-top:8px; font-size:13px; color:#666;"><b>词形变化：</b><br>`;
+            data.ec.word.wfs.forEach(wf => {
+              wfsHtml += `<span style="display:inline-block; background:#f0f7ea; padding:2px 8px; border-radius:10px; margin:4px 4px 0 0; cursor:pointer; color:#3a8a00;" onclick="speak('${wf.wf.value}')">${wf.wf.name}: ${wf.wf.value} 🔊</span>`;
+            });
+            wfsHtml += `</div>`;
+          }
+          
+          // 同义词
+          let synonymsHtml = '';
+          if (data.syno && data.syno.synos) {
+            synonymsHtml = `<div style="margin-top:8px; font-size:13px; color:#666;"><b>近义词：</b><br>`;
+            data.syno.synos.forEach(s => {
+              synonymsHtml += `<span style="display:inline-block; background:#eee; padding:2px 8px; border-radius:10px; margin:4px 4px 0 0; cursor:pointer;" onclick="speak('${s.word}')">${s.word} 🔊</span>`;
+            });
+            synonymsHtml += `</div>`;
+          }
+
+          if (finalZh.length === 0) finalZh.push('暂无中文释义');
+          
+          const newItem = {
+            id: Date.now(),
+            en: raw,
+            zh: finalZh.join('; '),
+            grammar: `【查词记录】${raw} 的释义。`
+          };
+
+          const isExist = [...DEFAULT_LIBRARY, ...userVocabulary].some(item => item.en.toLowerCase() === raw.toLowerCase());
+          if (!isExist) {
+            userVocabulary.push(newItem);
+            localStorage.setItem('user_vocab', JSON.stringify(userVocabulary));
+          }
+
+          resultHtml = `
+            <div style="background:#fff; padding:12px; border-radius:8px; border:1px solid #eee;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <div style="font-size:20px; font-weight:bold;">${raw}</div>
+                <button class="btn" onclick="speak('${raw}')" style="padding:4px 8px; font-size:18px; background:#e8f5e0; color:#3a8a00;">🔊</button>
+              </div>
+              ${meaningsHtml}
+              ${wfsHtml}
+              ${synonymsHtml}
+              <div style="margin-top:10px; font-size:12px; color:#999;">
+                ${isExist ? '已在题库中' : '✅ 已加入题库'}
+              </div>
             </div>
           `;
         }
+
+        resDiv.innerHTML = resultHtml;
         updateDashboard();
       } catch (e) {
-        resDiv.innerHTML = '❌ 查询失败，请尝试其他词或句子。';
+        resDiv.innerHTML = '❌ 查询失败，请尝试其他词或检查网络。';
       }
     }
 
@@ -351,11 +464,9 @@
       
       const qTextDiv = document.getElementById('q-text');
       if (qType === 'select_zh') {
-        // 如果是英译中，英文题目支持点词和发音
         qTextDiv.innerHTML = `${wrapWords(currentQ.en)} <span class="speaker-icon" onclick="speak('${currentQ.en}')">🔊</span>`;
       } else {
-        // 如果是中译英，中文题目不需要点词
-        qTextDiv.innerHTML = `${currentQ.zh}`;
+        qTextDiv.innerHTML = `${wrapWords(currentQ.zh)} <span class="speaker-icon" onclick="speak('${currentQ.zh}', 'zh-CN')">🔊</span>`;
       }
       
       const optsDiv = document.getElementById('q-options');
@@ -376,7 +487,6 @@
         const btn = document.createElement('button');
         btn.className = 'opt-btn';
         
-        // 给英文选项加上小喇叭按钮
         if (qType === 'select_zh') {
           btn.innerHTML = `<span>${opt.zh}</span>`;
         } else {
@@ -384,7 +494,7 @@
         }
         
         btn.onclick = (e) => {
-          if(e.target.classList.contains('speaker-icon')) return; // 点喇叭不选答案
+          if(e.target.classList.contains('speaker-icon')) return;
           checkAnswer(btn, opt.en === currentQ.en);
         };
         optsDiv.appendChild(btn);
@@ -394,13 +504,15 @@
     // 渲染：拼写题
     function renderSpellQuestion() {
       document.getElementById('q-type').textContent = '听音拼写 (根据发音/释义写出英文)';
-      document.getElementById('q-text').innerHTML = `${currentQ.zh} <span class="speaker-icon" onclick="speak('${currentQ.en}')" style="font-size:24px;">🔊</span>`;
+      document.getElementById('q-text').innerHTML = `
+        ${wrapWords(currentQ.zh)} 
+        <span class="speaker-icon" onclick="speak('${currentQ.en}')" style="font-size:24px;">🔊</span>
+      `;
       
       document.getElementById('q-options').style.display = 'none';
       document.getElementById('q-input-area').style.display = 'flex';
       document.getElementById('q-speak-area').style.display = 'none';
       
-      // 如果是个句子，提示有点长，如果是单词，直接播放
       setTimeout(() => speak(currentQ.en), 300); 
     }
 
@@ -408,8 +520,6 @@
     function renderSpeakQuestion() {
       document.getElementById('q-type').textContent = '口语跟读 (大声朗读英文)';
       const qTextDiv = document.getElementById('q-text');
-      
-      // 给整个句子加喇叭，同时每个单词可点击
       qTextDiv.innerHTML = `${wrapWords(currentQ.en)} <span class="speaker-icon" onclick="speak('${currentQ.en}')" style="font-size:24px;">🔊</span>`;
       
       document.getElementById('q-options').style.display = 'none';
@@ -423,7 +533,6 @@
     function submitInput() {
       const val = document.getElementById('q-input').value.trim().toLowerCase();
       if (!val) return;
-      // 忽略标点和大小写进行比对
       const correct = currentQ.en.toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()]/g,"");
       const user = val.replace(/[.,/#!$%^&*;:{}=\-_`~()]/g,"");
       checkAnswer(null, user === correct);
@@ -459,7 +568,6 @@
         
         const target = currentQ.en.toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()]/g,"");
         const spoken = speechResult.replace(/[.,/#!$%^&*;:{}=\-_`~()]/g,"");
-        // 简单匹配
         checkAnswer(null, spoken.includes(target) || target.includes(spoken));
       };
 
@@ -492,7 +600,7 @@
       if (qType.startsWith('select')) {
         const btns = document.querySelectorAll('.opt-btn');
         btns.forEach(b => {
-          const text = b.querySelector('span').textContent; // 获取文本
+          const text = b.querySelector('span').textContent;
           if (text === (qType === 'select_zh' ? currentQ.zh : currentQ.en)) {
             b.classList.add('correct');
           }
@@ -520,11 +628,11 @@
       localStorage.setItem('user_stats', JSON.stringify(stats));
 
       fbGrammar.innerHTML = `
-        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
           <b>正确答案：</b> ${wrapWords(currentQ.en)} 
           <span class="speaker-icon" onclick="speak('${currentQ.en}')" style="font-size:18px;">🔊</span>
         </div>
-        <div style="font-size:14px; color:#666; margin-bottom:8px;">(${currentQ.zh})</div>
+        <div style="font-size:14px; color:#666; margin-bottom:8px;">释义：${wrapWords(currentQ.zh)}</div>
         <b>💡 语法/要点解析：</b><br>${currentQ.grammar}
       `;
     }
