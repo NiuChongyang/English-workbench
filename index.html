@@ -34,7 +34,8 @@
     .progress-bar { height: 12px; background: #e5e5e5; border-radius: 6px; margin-bottom: 20px; overflow: hidden; }
     .progress-fill { height: 100%; background: var(--primary); width: 0%; transition: 0.3s; }
     .question-type { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
-    .question-text { font-size: 22px; font-weight: bold; margin-bottom: 20px; line-height: 1.5; }
+    .question-text { font-size: 22px; font-weight: bold; margin-bottom: 10px; line-height: 1.5; }
+    .sub-zh-text { font-size: 15px; color: #666; margin-bottom: 20px; line-height: 1.5; font-weight: normal; }
     
     .options-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
     .opt-btn { padding: 14px; border: 2px solid var(--border); border-radius: 12px; font-size: 16px; text-align: left; background: #fff; cursor: pointer; transition: 0.1s; display: flex; justify-content: space-between; align-items: center; }
@@ -69,6 +70,7 @@
     .clickable-word:active { background: #e8f5e0; }
     #word-popup { display: none; position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 14px 20px; border-radius: 16px; z-index: 200; font-size: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); text-align: center; min-width: 180px; max-width: 90%; line-height: 1.6; }
     #word-popup b { color: #58cc02; font-size: 20px; display: block; margin-bottom: 6px; }
+    .context-hint { margin-top: 10px; padding-top: 8px; border-top: 1px dashed #555; font-size: 13px; color: #ddd; text-align: left; }
 
     /* 底部导航 */
     .footer { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #eee; display: flex; justify-content: space-around; padding: 10px 0 max(10px, env(safe-area-inset-bottom)); z-index: 50; }
@@ -119,6 +121,7 @@
     <div class="progress-bar"><div class="progress-fill" id="q-progress"></div></div>
     <div class="question-type" id="q-type">选择题</div>
     <div class="question-text" id="q-text">Loading...</div>
+    <div class="sub-zh-text" id="q-sub-zh" style="display:none;"></div>
     
     <div id="q-options" class="options-grid"></div>
     
@@ -132,7 +135,6 @@
       <button class="mic-btn" id="mic-btn" onclick="toggleRecord()">🎙️</button>
     </div>
 
-    <!-- 增加跳过按钮 -->
     <div class="action-row">
       <button class="btn btn-outline" style="flex:1;" onclick="quitQuiz()">退出</button>
       <button class="btn btn-outline" style="flex:1; border-color:#ffdfe0; color:#ff4b4b;" onclick="skipQuestion()">跳过本题</button>
@@ -165,7 +167,8 @@
       { id: 7, en: "happy", zh: "快乐的", grammar: "形容词，常用于系动词（如 be, feel）之后作表语。" },
       { id: 8, en: "beautiful", zh: "美丽的", grammar: "多音节形容词，比较级需要加 more，最高级加 most。" },
       { id: 9, en: "family", zh: "家庭", grammar: "集合名词，作主语时，若强调整体谓语用单数，强调成员谓语用复数。" },
-      { id: 10, en: "money", zh: "钱", grammar: "不可数名词，不能用 a/an 修饰，表示“一笔钱”用 a sum of money。" }
+      { id: 10, en: "money", zh: "钱", grammar: "不可数名词，不能用 a/an 修饰，表示“一笔钱”用 a sum of money。" },
+      { id: 11, en: "how are you holding up?", zh: "你最近还好吗？（撑得住吗？）", grammar: "hold up 是固定短语，口语中用来询问某人（在困难时期）是否撑得住。" }
     ];
 
     let userVocabulary = JSON.parse(localStorage.getItem('user_vocab') || '[]');
@@ -246,7 +249,7 @@
       
       const cacheKey = type + '_' + lookupWord;
       if (wordCache[cacheKey]) {
-        popup.innerHTML = `<b>${cleanWord}</b> 🔊<br><span style="font-size:14px;color:#ddd;">${wordCache[cacheKey]}</span>`;
+        popup.innerHTML = `<b>${cleanWord}</b> 🔊<br><span style="font-size:14px;color:#ddd;">${wordCache[cacheKey]}</span>${getContextHint(cleanWord, type)}`;
         return;
       }
       
@@ -264,7 +267,6 @@
                data.ec.word.trs.forEach(tr => {
                   let pos = tr.pos ? `<span style="color:#58cc02;">${tr.pos}</span> ` : '';
                   if(tr.tr && tr.tr[0] && tr.tr[0].l && tr.tr[0].l.i) {
-                      // 提取该项下所有释义
                       let items = tr.tr[0].l.i.map(i=>i.trim()).filter(i=>i);
                       if(items.length > 0) {
                           parts.push(`${pos}${items.join('；')}`);
@@ -281,7 +283,7 @@
             resultText = data.responseData.translatedText;
           }
         } else {
-          // 中文查英文 (优先用有道翻译引擎，其次 MyMemory)
+          // 中文查英文
           try {
              const res = await fetch(`https://dict.youdao.com/jsonapi?q=${encodeURIComponent(lookupWord)}`);
              const data = await res.json();
@@ -300,10 +302,22 @@
         if (!resultText || resultText.toLowerCase() === lookupWord) resultText = "暂无翻译";
         
         wordCache[cacheKey] = resultText;
-        popup.innerHTML = `<b>${cleanWord}</b> 🔊<br><span style="font-size:14px;color:#ddd;">${resultText}</span>`;
+        popup.innerHTML = `<b>${cleanWord}</b> 🔊<br><span style="font-size:14px;color:#ddd;">${resultText}</span>${getContextHint(cleanWord, type)}`;
       } catch(err) {
         popup.innerHTML = `<b>${cleanWord}</b><br>网络异常，查询失败`;
       }
+    }
+
+    // 获取语境提示
+    function getContextHint(clickedWord, type) {
+      if (!currentQ) return '';
+      const isInEn = currentQ.en.toLowerCase().includes(clickedWord.toLowerCase());
+      const isInZh = currentQ.zh.includes(clickedWord);
+      
+      if (isInEn || isInZh) {
+        return `<div class="context-hint">💡 <b>结合本题语境：</b><br>${currentQ.en}<br>${currentQ.zh}</div>`;
+      }
+      return '';
     }
 
     document.body.addEventListener('click', function(e) {
@@ -329,7 +343,6 @@
           // 中文搜英文
           let enWords = new Set();
           
-          // 1. 有道翻译结果 (对于衣服这类日常词很准)
           try {
              const yRes = await fetch(`https://dict.youdao.com/jsonapi?q=${encodeURIComponent(raw)}`);
              const yData = await yRes.json();
@@ -338,7 +351,6 @@
              }
           } catch(e) {}
           
-          // 2. MyMemory 补充同义词
           try {
              const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(raw)}&langpair=zh-CN|en`);
              const data = await res.json();
@@ -357,7 +369,6 @@
             let posHtml = '';
             let wfsHtml = '';
             
-            // 获取英文词的完整信息
             try {
               const yRes = await fetch(`https://dict.youdao.com/jsonapi?q=${encodeURIComponent(enText)}`);
               const yData = await yRes.json();
@@ -424,7 +435,6 @@
               let pos = tr.pos || ''; 
               if(pos) posSet.add(pos);
               if (tr.tr && tr.tr[0] && tr.tr[0].l && tr.tr[0].l.i) {
-                // 取该词性下的所有释义
                 let items = tr.tr[0].l.i.map(i => i.trim()).filter(i => i);
                 if(items.length > 0) {
                    let meaningStr = items.join('；');
@@ -556,6 +566,7 @@
     // 渲染：选择题
     function renderSelectQuestion() {
       document.getElementById('q-type').textContent = qType === 'select_zh' ? '英译中 (选择正确的意思)' : '中译英 (选择正确的句子/单词)';
+      document.getElementById('q-sub-zh').style.display = 'none'; // 选择题不需要额外中文
       
       const qTextDiv = document.getElementById('q-text');
       if (qType === 'select_zh') {
@@ -596,11 +607,14 @@
       });
     }
 
-    // 渲染：拼写题
+    // 渲染：拼写题 (增加中文展示)
     function renderSpellQuestion() {
       document.getElementById('q-type').textContent = '听音拼写 (根据发音/释义写出英文)';
+      document.getElementById('q-sub-zh').style.display = 'block';
+      document.getElementById('q-sub-zh').innerHTML = `中文释义：${wrapWords(currentQ.zh, 'zh')}`;
+      
       document.getElementById('q-text').innerHTML = `
-        ${wrapWords(currentQ.zh, 'zh')} 
+        ${wrapWords(currentQ.en, 'en')}
         <span class="speaker-icon" onclick="speak('${currentQ.en}')" style="font-size:24px;">🔊</span>
       `;
       
@@ -611,9 +625,12 @@
       setTimeout(() => speak(currentQ.en), 300); 
     }
 
-    // 渲染：口语题
+    // 渲染：口语题 (增加中文展示)
     function renderSpeakQuestion() {
       document.getElementById('q-type').textContent = '口语跟读 (大声朗读英文)';
+      document.getElementById('q-sub-zh').style.display = 'block';
+      document.getElementById('q-sub-zh').innerHTML = `中文翻译：${wrapWords(currentQ.zh, 'zh')}`;
+      
       const qTextDiv = document.getElementById('q-text');
       qTextDiv.innerHTML = `${wrapWords(currentQ.en, 'en')} <span class="speaker-icon" onclick="speak('${currentQ.en}')" style="font-size:24px;">🔊</span>`;
       
@@ -621,12 +638,13 @@
       document.getElementById('q-input-area').style.display = 'none';
       document.getElementById('q-speak-area').style.display = 'block';
       
+      // 兼容性检测 (鸿蒙系统大概率走这里)
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       const micBtn = document.getElementById('mic-btn');
       const tip = document.getElementById('speak-tip');
       if (!SpeechRecognition) {
         micBtn.style.display = 'none';
-        tip.innerHTML = '<span style="color:#ff4b4b;">当前设备不支持语音识别</span><br>请自己朗读并点击下方“跳过本题”';
+        tip.innerHTML = '<span style="color:#ff4b4b;">华为/鸿蒙等系统暂不支持网页录音</span><br>请跟读后点击下方“跳过本题”继续';
       } else {
         micBtn.style.display = 'flex';
         tip.innerHTML = '点击麦克风，大声读出上方句子';
@@ -679,7 +697,7 @@
       };
 
       recognition.onerror = () => {
-        alert('录音失败，可能是麦克风权限未开启，或浏览器不支持。');
+        alert('录音失败，请检查浏览器麦克风权限。');
         stopRecordUI();
       };
 
