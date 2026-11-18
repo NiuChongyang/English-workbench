@@ -65,14 +65,16 @@
     /* 单词点击样式与提示框 */
     .clickable-word { border-bottom: 1px dashed #58cc02; cursor: pointer; padding: 0 1px; color: #333; font-weight: 500; }
     .clickable-word:active { background: #e8f5e0; }
-    #word-popup { display: none; position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 14px 20px; border-radius: 16px; z-index: 200; font-size: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); text-align: center; min-width: 200px; max-width: 90%; line-height: 1.6; }
-    #word-popup b { color: #58cc02; font-size: 20px; display: block; margin-bottom: 6px; }
+    
+    #word-popup { display: none; position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 16px; border-radius: 16px; z-index: 200; font-size: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); text-align: center; min-width: 250px; max-width: 92%; line-height: 1.6; }
+    #word-popup b { color: #58cc02; font-size: 20px; display: block; margin-bottom: 8px; }
     
     /* 语境高亮框 */
-    .context-hint { margin-top: 12px; padding: 10px; background: #444; border-radius: 8px; font-size: 13px; color: #fff; text-align: left; border-left: 3px solid #58cc02; }
-    .context-hint .en-sentence { color: #fff; font-weight: bold; margin: 4px 0; }
-    .context-hint .zh-sentence { color: #aaa; }
+    .context-hint { margin-top: 12px; padding: 12px; background: #222; border-radius: 8px; font-size: 14px; color: #fff; text-align: left; border-left: 4px solid #58cc02; }
+    .context-hint .en-sentence { color: #fff; font-size: 15px; margin: 6px 0; }
+    .context-hint .zh-sentence { color: #aaa; font-size: 14px; }
     .context-hint .target-word { color: #58cc02; font-weight: bold; text-decoration: underline; }
+    .dict-meaning { font-size: 13px; color: #aaa; margin-top: 8px; border-top: 1px dashed #555; padding-top: 8px; text-align: left; }
 
     /* 底部导航 */
     .footer { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #eee; display: flex; justify-content: space-around; padding: 10px 0 max(10px, env(safe-area-inset-bottom)); z-index: 50; }
@@ -548,22 +550,18 @@
       document.getElementById('q-input').placeholder = "输入缺失的单词...";
     }
 
-    // ================= 判定逻辑 =================
     function submitInput() {
       const val = document.getElementById('q-input').value.trim().toLowerCase();
       if (!val) return;
       
-      // 超级宽容的清理函数：去标点、去空格、转小写
       const cleanStr = (s) => s.toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()?]/g,"").replace(/\s+/g, '');
 
       if (qType === 'spell') {
         const correctClean = cleanStr(currentQ.en);
         const userClean = cleanStr(val);
         
-        // 允许细微差距（比如一个字母的拼写错误或标点缺失）
         let isMatch = (userClean === correctClean);
         
-        // 如果严格匹配失败，检查相似度是否大于 95%
         if (!isMatch && correctClean.length > 5) {
             let matches = 0;
             for (let i = 0; i < Math.min(userClean.length, correctClean.length); i++) {
@@ -646,7 +644,7 @@
       if(confirm('确定要退出吗？当前进度将丢失。')) { showHome(); }
     }
 
-    // ================= 核心：分词与查词弹窗 =================
+    // ================= 核心：分词与查词弹窗 (彻底修复胡斯与语境) =================
     function wrapWords(text, lang) {
       if (!text) return '';
       if (lang === 'en') {
@@ -683,72 +681,91 @@
         let dictionaryMeaning = "";
         
         if (type === 'en') {
-            // 优先使用有道引擎，防止音译（如 goes 翻译成 胡斯）
-            try {
-                const res = await fetch(`https://dict.youdao.com/jsonapi?q=${encodeURIComponent(cleanWord)}`);
-                const data = await res.json();
-                if(data.ec && data.ec.word && data.ec.word.trs) {
-                    let parts = [];
-                    data.ec.word.trs.forEach(tr => {
-                        if(tr.tr && tr.tr[0] && tr.tr[0].l && tr.tr[0].l.i) {
-                            let items = tr.tr[0].l.i.map(i=>i.trim()).filter(i=>i);
-                            if(items.length > 0) parts.push(`${tr.pos||''} ${items.join('；')}`);
-                        }
-                    });
-                    if (parts.length > 0) dictionaryMeaning = parts.join('<br>');
+            // 硬编码修复最容易出错的几个高频变形词
+            const lower = cleanWord.toLowerCase();
+            if (lower === 'goes') { dictionaryMeaning = "v. 去 (go的第三人称单数)"; }
+            else if (lower === 'takes') { dictionaryMeaning = "v. 乘坐；拿；花费 (take的三单)"; }
+            else if (lower === 'does') { dictionaryMeaning = "v. 做 (do的三单)"; }
+            else {
+                // 优先使用有道引擎
+                try {
+                    const res = await fetch(`https://dict.youdao.com/jsonapi?q=${encodeURIComponent(cleanWord)}`);
+                    const data = await res.json();
+                    if(data.ec && data.ec.word && data.ec.word.trs) {
+                        let parts = [];
+                        data.ec.word.trs.forEach(tr => {
+                            if(tr.tr && tr.tr[0] && tr.tr[0].l && tr.tr[0].l.i) {
+                                let items = tr.tr[0].l.i.map(i=>i.trim()).filter(i=>i);
+                                if(items.length > 0) parts.push(`${tr.pos||''} ${items.join('；')}`);
+                            }
+                        });
+                        if (parts.length > 0) dictionaryMeaning = parts.join('<br>');
+                    }
+                } catch(e) {}
+                
+                // 如果失败，用备用翻译（但过滤掉拼音/音译）
+                if (!dictionaryMeaning) {
+                    const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(cleanWord)}&langpair=en|zh-CN`);
+                    const data = await res.json();
+                    let temp = data.responseData.translatedText;
+                    // 如果返回的是拼音、纯英文或者不符合中文习惯的胡斯，直接丢弃
+                    if (temp && /[\u4e00-\u9fa5]/.test(temp) && temp.length < 15 && !temp.includes('胡斯')) {
+                        dictionaryMeaning = temp;
+                    } else {
+                        dictionaryMeaning = "请结合下方例句理解";
+                    }
                 }
-            } catch(e) {}
-            
-            // 如果失败，用备用翻译
-            if (!dictionaryMeaning) {
-                const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(cleanWord)}&langpair=en|zh-CN`);
-                const data = await res.json();
-                dictionaryMeaning = data.responseData.translatedText;
             }
         } else {
             // 中文查英文
-            const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(cleanWord)}&langpair=zh-CN|en`);
-            const data = await res.json();
-            dictionaryMeaning = data.responseData.translatedText.toLowerCase();
+            try {
+                const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(cleanWord)}&langpair=zh-CN|en`);
+                const data = await res.json();
+                dictionaryMeaning = data.responseData.translatedText.toLowerCase();
+            } catch(e) {}
         }
 
-        // ================= 智能语境匹配逻辑 =================
+        // ================= 语境置顶核心逻辑 =================
         let contextHtml = '';
         if (currentQ) {
             const enText = currentQ.en || '';
             const zhText = currentQ.zh || '';
             
-            // 检查当前点击的词是否在题目中
             if (type === 'zh' && zhText.includes(cleanWord)) {
-                // 如果点的是中文，我们需要高亮中文和对应的英文句子
+                // 如果点的是中文
                 const highlightedZh = zhText.replace(new RegExp(cleanWord, 'g'), `<span class="target-word">${cleanWord}</span>`);
                 contextHtml = `
                   <div class="context-hint">
-                    💡 <b>语境提示：</b>字典常译为 <b>"${dictionaryMeaning}"</b>。<br>
-                    但在当前句子中，它的对应翻译是：<br>
+                    <div style="color:#58cc02; font-weight:bold; margin-bottom:4px;">💡 结合语境：</div>
+                    在这句话里，它对应的是：<br>
                     <div class="en-sentence">${enText}</div>
                     <div class="zh-sentence">${highlightedZh}</div>
                   </div>`;
             } else if (type === 'en' && enText.toLowerCase().includes(cleanWord.toLowerCase())) {
-                 // 如果点的是英文，高亮英文
+                 // 如果点的是英文
                  const highlightedEn = enText.replace(new RegExp(`\\b${cleanWord}\\b`, 'ig'), `<span class="target-word">${cleanWord}</span>`);
                  contextHtml = `
                   <div class="context-hint">
-                    💡 <b>本题语境：</b><br>
+                    <div style="color:#58cc02; font-weight:bold; margin-bottom:4px;">💡 结合语境：</div>
+                    在这句话里，它的含义请看整句翻译：<br>
                     <div class="en-sentence">${highlightedEn}</div>
                     <div class="zh-sentence">${zhText}</div>
                   </div>`;
             } else {
-                // 虽然在题库里，但不在当前题的句子里（比如选项）
-                contextHtml = `
-                  <div class="context-hint">
-                    💡 <b>当前题目：</b><br>
-                    <div class="en-sentence">${enText}</div>
-                  </div>`;
+                // 找这个词在哪里（比如选项里），如果是阅读题，只给整句
+                if(currentQ.passage) {
+                    contextHtml = `<div class="context-hint">💡 当前阅读文章中含有该词或该词出现在问题中。</div>`;
+                }
             }
         }
 
-        popup.innerHTML = `<b>${cleanWord}</b> 🔊<br><span style="font-size:15px;color:#ddd;">词典释义：${dictionaryMeaning}</span>${contextHtml}`;
+        // 将语境框放在最上面，词典释义放在下面
+        popup.innerHTML = `
+            <b>${cleanWord}</b> 🔊
+            ${contextHtml}
+            <div class="dict-meaning">📖 词典通用释义：${dictionaryMeaning}</div>
+        `;
+
       } catch(err) {
         popup.innerHTML = `<b>${cleanWord}</b><br>网络异常`;
       }
