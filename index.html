@@ -50,7 +50,7 @@
     .input-area input:focus { border-color: var(--primary); }
     
     /* 解析区 */
-    #feedback-panel { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #eee; padding: 20px; border-radius: 20px 20px 0 0; box-shadow: 0 -4px 12px rgba(0,0,0,0.1); z-index: 100; }
+    #feedback-panel { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #eee; padding: 20px; border-radius: 20px 20px 0 0; box-shadow: 0 -4px 12px rgba(0,0,0,0.1); z-index: 100; max-height: 80vh; overflow-y: auto; }
     .feedback-title { font-size: 18px; font-weight: bold; margin-bottom: 10px; }
     .feedback-title.correct { color: var(--primary); }
     .feedback-title.wrong { color: #ff4b4b; }
@@ -63,11 +63,11 @@
     #search-result { margin-top: 14px; font-size: 14px; line-height: 1.7; display: none; background: #fafafa; padding: 12px; border-radius: 12px; }
     
     /* 单词点击样式与提示框 */
-    .clickable-word { border-bottom: 1px dashed #aaa; cursor: pointer; padding: 0 1px; }
+    .clickable-word { border-bottom: 1px dashed #58cc02; cursor: pointer; padding: 0 1px; color: #333; font-weight: 500; }
     .clickable-word:active { background: #e8f5e0; }
-    #word-popup { display: none; position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 14px 20px; border-radius: 16px; z-index: 200; font-size: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); text-align: center; min-width: 180px; max-width: 90%; line-height: 1.6; }
+    #word-popup { display: none; position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 14px 20px; border-radius: 16px; z-index: 200; font-size: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); text-align: center; min-width: 200px; max-width: 90%; line-height: 1.6; }
     #word-popup b { color: #58cc02; font-size: 20px; display: block; margin-bottom: 6px; }
-    .context-hint { margin-top: 10px; padding-top: 8px; border-top: 1px dashed #555; font-size: 13px; color: #ddd; text-align: left; }
+    .context-hint { margin-top: 10px; padding: 8px; background: #444; border-radius: 8px; font-size: 13px; color: #ddd; text-align: left; }
 
     /* 底部导航 */
     .footer { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #eee; display: flex; justify-content: space-around; padding: 10px 0 max(10px, env(safe-area-inset-bottom)); z-index: 50; }
@@ -76,7 +76,6 @@
     
     .dict-item { background:#fff; padding:12px; border-radius:8px; border:1px solid #eee; margin-bottom: 8px; }
     .dict-pos { color:#58cc02; font-weight:bold; margin-right:6px; }
-    .dict-wf { display:inline-block; background:#f0f7ea; padding:2px 8px; border-radius:10px; margin:4px 4px 0 0; cursor:pointer; color:#3a8a00; font-size: 13px;}
     .action-row { display: flex; gap: 10px; margin-top: 20px; }
   </style>
 </head>
@@ -152,7 +151,6 @@
 
   <script>
     // ================= 内置题库数据 =================
-    // 1. 单词与句子库
     const DEFAULT_LIBRARY = [
       { id: 1, type: 'sentence', en: "I want to eat an apple.", zh: "我想要吃一个苹果。", grammar: "want to do sth. 想要做某事。" },
       { id: 2, type: 'sentence', en: "Could you say that again?", zh: "你能再说一遍吗？", grammar: "Could 引导的委婉请求句型。" },
@@ -162,7 +160,6 @@
       { id: 6, type: 'word', en: "happy", zh: "快乐的", grammar: "常用于系动词之后作表语。" }
     ];
 
-    // 2. 阅读理解题库
     const READING_LIBRARY = [
       {
         id: 101,
@@ -184,7 +181,6 @@
       }
     ];
 
-    // 3. 语法知识题库
     const GRAMMAR_LIBRARY = [
       {
         id: 201,
@@ -201,14 +197,6 @@
         options: ["is", "are", "have", "has"],
         answer: "is",
         grammar: "milk 是不可数名词，There be 句型中 be 动词用单数 is。"
-      },
-      {
-        id: 203,
-        type: 'grammar',
-        question: "I am looking forward to ______ you.",
-        options: ["see", "saw", "seeing", "seen"],
-        answer: "seeing",
-        grammar: "look forward to 后面接动名词 (doing sth.)，to 在这里是介词。"
       }
     ];
 
@@ -219,16 +207,12 @@
 
     try {
       const parsedVocab = JSON.parse(localStorage.getItem('user_vocab') || '[]');
-      if (Array.isArray(parsedVocab)) {
-          userVocabulary = parsedVocab.filter(item => item && typeof item.en === 'string');
-      }
+      if (Array.isArray(parsedVocab)) userVocabulary = parsedVocab.filter(item => item && typeof item.en === 'string');
     } catch(e) {}
-
     try {
       const parsedWrong = JSON.parse(localStorage.getItem('wrong_questions') || '[]');
       if (Array.isArray(parsedWrong)) wrongQuestions = parsedWrong;
     } catch(e) {}
-
     try {
       const parsedStats = JSON.parse(localStorage.getItem('user_stats') || '{}');
       if (parsedStats && typeof parsedStats.mastered === 'number') stats = parsedStats;
@@ -258,7 +242,6 @@
     }
 
     function updateDashboard() {
-      // 题库总数 = 默认词库 + 用户词库 + 阅读题 + 语法题
       const total = DEFAULT_LIBRARY.length + userVocabulary.length + READING_LIBRARY.length + GRAMMAR_LIBRARY.length;
       document.getElementById('stat-mastered').textContent = stats.mastered || 0;
       document.getElementById('stat-wrong').textContent = wrongQuestions.length;
@@ -333,7 +316,6 @@
           `;
 
         } else {
-          // 英文查中文
           let data = null;
           try {
             const res = await fetch(`https://dict.youdao.com/jsonapi?q=${encodeURIComponent(raw)}`);
@@ -394,9 +376,7 @@
     let qType = ''; 
 
     function startDailyQuiz() {
-      // 混合所有题库：默认词库+用户词库+阅读+语法
       let pool = [...DEFAULT_LIBRARY, ...userVocabulary, ...READING_LIBRARY, ...GRAMMAR_LIBRARY];
-      // 打乱并抽 10 题
       currentQueue = pool.sort(() => Math.random() - 0.5).slice(0, 10);
       if(currentQueue.length === 0) return alert('题库为空，请先查几个词！');
       showQuiz();
@@ -427,24 +407,20 @@
       document.getElementById('word-popup').style.display = 'none';
       document.getElementById('q-passage').style.display = 'none';
       
-      const total = 10;
       const progress = ((10 - currentQueue.length - 1) / 10) * 100;
       document.getElementById('q-progress').style.width = `${Math.max(10, progress)}%`;
 
-      // 根据题型分发
       if (currentQ.type === 'reading') {
         renderReadingQuestion();
       } else if (currentQ.type === 'grammar') {
         renderGrammarQuestion();
       } else {
-        // 词汇/句子，随机抽取题型
         const rand = Math.random();
         if (currentQ.type === 'word') {
            if (rand < 0.4) qType = Math.random() > 0.5 ? 'select_zh' : 'select_en';
            else if (rand < 0.8) qType = 'spell';
-           else qType = 'fill'; // 单词也可以挖空
+           else qType = 'fill';
         } else {
-           // 长句
            if (rand < 0.3) qType = 'select_zh';
            else if (rand < 0.6) qType = 'spell';
            else qType = 'fill';
@@ -456,33 +432,15 @@
       }
     }
 
-    // 阅读理解渲染
+    // 阅读理解渲染 (完全支持点词)
     function renderReadingQuestion() {
       document.getElementById('q-type').textContent = '阅读理解';
       const passageDiv = document.getElementById('q-passage');
       passageDiv.style.display = 'block';
-      passageDiv.innerHTML = currentQ.passage;
+      // 对文章进行包裹，使其可点击
+      passageDiv.innerHTML = wrapWords(currentQ.passage, 'en') + ` <span class="speaker-icon" onclick="speak('${currentQ.passage}')">🔊</span>`;
       
-      document.getElementById('q-text').textContent = currentQ.question;
-      document.getElementById('q-sub-zh').style.display = 'none';
-      document.getElementById('q-input-area').style.display = 'none';
-      
-      const optsDiv = document.getElementById('q-options');
-      optsDiv.style.display = 'grid';
-      optsDiv.innerHTML = '';
-      
-      currentQ.options.forEach(opt => {
-        const btn = document.createElement('button');
-        btn.className = 'opt-btn';
-        btn.innerHTML = `<span>${opt}</span>`;
-        btn.onclick = () => checkAnswer(btn, opt === currentQ.answer);
-        optsDiv.appendChild(btn);
-      });
-    }
-
-    // 语法题渲染
-    function renderGrammarQuestion() {
-      document.getElementById('q-type').textContent = '语法单项选择';
+      // 对问题也进行包裹
       document.getElementById('q-text').innerHTML = wrapWords(currentQ.question, 'en');
       document.getElementById('q-sub-zh').style.display = 'none';
       document.getElementById('q-input-area').style.display = 'none';
@@ -494,8 +452,36 @@
       currentQ.options.forEach(opt => {
         const btn = document.createElement('button');
         btn.className = 'opt-btn';
-        btn.innerHTML = `<span>${opt}</span>`;
-        btn.onclick = () => checkAnswer(btn, opt === currentQ.answer);
+        // 选项也支持点词
+        btn.innerHTML = `<span>${wrapWords(opt, 'en')}</span>`;
+        btn.onclick = (e) => {
+           if(e.target.classList.contains('clickable-word')) return; // 如果点的是单词，不选答案
+           checkAnswer(btn, opt === currentQ.answer);
+        };
+        optsDiv.appendChild(btn);
+      });
+    }
+
+    // 语法题渲染 (选项支持点词)
+    function renderGrammarQuestion() {
+      document.getElementById('q-type').textContent = '语法单项选择';
+      // 语法题目中的空格不需要点，但其他词可以点
+      document.getElementById('q-text').innerHTML = wrapWords(currentQ.question, 'en');
+      document.getElementById('q-sub-zh').style.display = 'none';
+      document.getElementById('q-input-area').style.display = 'none';
+      
+      const optsDiv = document.getElementById('q-options');
+      optsDiv.style.display = 'grid';
+      optsDiv.innerHTML = '';
+      
+      currentQ.options.forEach(opt => {
+        const btn = document.createElement('button');
+        btn.className = 'opt-btn';
+        btn.innerHTML = `<span>${wrapWords(opt, 'en')}</span>`;
+        btn.onclick = (e) => {
+           if(e.target.classList.contains('clickable-word')) return;
+           checkAnswer(btn, opt === currentQ.answer);
+        };
         optsDiv.appendChild(btn);
       });
     }
@@ -532,21 +518,22 @@
         if (qType === 'select_zh') {
           btn.innerHTML = `<span>${opt.zh}</span>`;
         } else {
-          btn.innerHTML = `<span>${opt.en}</span><span class="speaker-icon" onclick="event.stopPropagation(); speak('${opt.en}')">🔊</span>`;
+          btn.innerHTML = `<span>${wrapWords(opt.en, 'en')}</span><span class="speaker-icon" onclick="event.stopPropagation(); speak('${opt.en}')">🔊</span>`;
         }
         
         btn.onclick = (e) => {
-          if(e.target.classList.contains('speaker-icon')) return;
+          if(e.target.classList.contains('speaker-icon') || e.target.classList.contains('clickable-word')) return;
           checkAnswer(btn, opt.en === currentQ.en);
         };
         optsDiv.appendChild(btn);
       });
     }
 
-    // 拼写题渲染（支持长句）
+    // 拼写题渲染（中文也可点）
     function renderSpellQuestion() {
       document.getElementById('q-type').textContent = '听音拼写 (听发音或看释义，拼出完整句子/单词)';
       document.getElementById('q-sub-zh').style.display = 'block';
+      // 中文释义套用 wrapWords
       document.getElementById('q-sub-zh').innerHTML = `中文释义：${wrapWords(currentQ.zh, 'zh')}`;
       
       document.getElementById('q-text').innerHTML = `
@@ -564,21 +551,13 @@
     function renderFillQuestion() {
       document.getElementById('q-type').textContent = '完形填空 (根据上下文填入缺失单词)';
       
-      // 提取句子中的单词（去标点）
       const words = currentQ.en.match(/[a-zA-Z']+/g) || [];
-      // 选一个长度大于2的词挖空
       const validWords = words.filter(w => w.length > 2);
-      if (validWords.length === 0) {
-         // 如果没有合适的词，降级为拼写
-         renderSpellQuestion();
-         return;
-      }
+      if (validWords.length === 0) { renderSpellQuestion(); return; }
       
       const targetWord = validWords[Math.floor(Math.random() * validWords.length)];
-      // 替换第一个匹配的词为 ___
-      currentQ.fillAnswer = targetWord; // 暂存答案
+      currentQ.fillAnswer = targetWord; 
       
-      // 正则替换（忽略大小写）
       const reg = new RegExp(`\\b${targetWord}\\b`, 'i');
       const displayEn = currentQ.en.replace(reg, '____');
       
@@ -599,13 +578,9 @@
       const cleanStr = (s) => s.toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()]/g,"").replace(/\s+/g, ' ');
 
       if (qType === 'spell') {
-        const correct = cleanStr(currentQ.en);
-        const user = cleanStr(val);
-        checkAnswer(null, user === correct);
+        checkAnswer(null, cleanStr(val) === cleanStr(currentQ.en));
       } else if (qType === 'fill') {
-        const correct = cleanStr(currentQ.fillAnswer);
-        const user = cleanStr(val);
-        checkAnswer(null, user === correct);
+        checkAnswer(null, cleanStr(val) === cleanStr(currentQ.fillAnswer));
       }
     }
 
@@ -617,7 +592,6 @@
         else btn.classList.add('wrong');
       }
 
-      // 高亮正确选项（如果是选择题）
       if (currentQ.type === 'reading' || currentQ.type === 'grammar' || qType.startsWith('select')) {
         const btns = document.querySelectorAll('.opt-btn');
         const correctText = currentQ.answer || (qType === 'select_zh' ? currentQ.zh : currentQ.en);
@@ -648,10 +622,9 @@
       }
       localStorage.setItem('user_stats', JSON.stringify(stats));
 
-      // 构建解析内容
       let answerHtml = '';
       if (currentQ.type === 'reading' || currentQ.type === 'grammar') {
-        answerHtml = `<b style="color:#58cc02;">正确答案：</b>${currentQ.answer}`;
+        answerHtml = `<b style="color:#58cc02;">正确答案：</b>${wrapWords(currentQ.answer, 'en')}`;
       } else if (qType === 'fill') {
         answerHtml = `<b style="color:#58cc02;">正确答案：</b>${currentQ.fillAnswer}<br><div style="margin-top:4px;">完整句子：${wrapWords(currentQ.en, 'en')}</div>`;
       } else {
@@ -677,8 +650,9 @@
       if(confirm('确定要退出吗？当前进度将丢失。')) { showHome(); }
     }
 
-    // 划词与弹窗（同以前）
+    // ================= 核心：分词与查词弹窗 =================
     function wrapWords(text, lang) {
+      if (!text) return '';
       if (lang === 'en') {
         return text.replace(/([a-zA-Z']+)/g, '<span class="clickable-word" onclick="clickWord(event, \'$1\', \'en\')">$1</span>');
       } else {
@@ -704,8 +678,11 @@
       popup.style.display = 'block';
       const cleanWord = word.replace(/[^a-zA-Z\u4e00-\u9fa5]/g, '');
       if(!cleanWord) return;
+      
       if (type === 'en') speak(cleanWord, 'en-US'); else speak(cleanWord, 'zh-CN');
+      
       popup.innerHTML = `<b>${cleanWord}</b> 查询中...`;
+      
       try {
         let resultText = "";
         if (type === 'en') {
@@ -717,11 +694,28 @@
             const data = await res.json();
             resultText = data.responseData.translatedText.toLowerCase();
         }
-        popup.innerHTML = `<b>${cleanWord}</b> 🔊<br><span style="font-size:14px;color:#ddd;">${resultText}</span>`;
+
+        // 获取语境提示
+        let contextHtml = '';
+        if (currentQ) {
+            const isInEn = currentQ.en && currentQ.en.toLowerCase().includes(cleanWord.toLowerCase());
+            const isInZh = currentQ.zh && currentQ.zh.includes(cleanWord);
+            if (isInEn || isInZh) {
+                contextHtml = `
+                  <div class="context-hint">
+                    💡 <b>结合本题语境：</b><br>
+                    ${currentQ.en}<br>
+                    <span style="color:#aaa;">${currentQ.zh}</span>
+                  </div>`;
+            }
+        }
+
+        popup.innerHTML = `<b>${cleanWord}</b> 🔊<br><span style="font-size:14px;color:#ddd;">${resultText}</span>${contextHtml}`;
       } catch(err) {
         popup.innerHTML = `<b>${cleanWord}</b><br>网络异常`;
       }
     }
+    
     document.body.addEventListener('click', function(e) {
       if (e.target.id !== 'word-popup' && !e.target.classList.contains('clickable-word')) {
         document.getElementById('word-popup').style.display = 'none';
