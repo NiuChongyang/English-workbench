@@ -67,8 +67,8 @@
     /* 单词点击样式与提示框 */
     .clickable-word { border-bottom: 1px dashed #aaa; cursor: pointer; padding: 0 1px; }
     .clickable-word:active { background: #e8f5e0; }
-    #word-popup { display: none; position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 12px 20px; border-radius: 24px; z-index: 200; font-size: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); text-align: center; min-width: 150px; max-width: 90%; line-height: 1.5; }
-    #word-popup b { color: #58cc02; font-size: 18px; display: block; margin-bottom: 4px; }
+    #word-popup { display: none; position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 14px 20px; border-radius: 16px; z-index: 200; font-size: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); text-align: center; min-width: 180px; max-width: 90%; line-height: 1.6; }
+    #word-popup b { color: #58cc02; font-size: 20px; display: block; margin-bottom: 6px; }
 
     /* 底部导航 */
     .footer { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #eee; display: flex; justify-content: space-around; padding: 10px 0 max(10px, env(safe-area-inset-bottom)); z-index: 50; }
@@ -79,6 +79,7 @@
     .dict-pos { color:#58cc02; font-weight:bold; margin-right:6px; }
     .dict-wf { display:inline-block; background:#f0f7ea; padding:2px 8px; border-radius:10px; margin:4px 4px 0 0; cursor:pointer; color:#3a8a00; font-size: 13px;}
     .dict-syn { display:inline-block; background:#eee; padding:2px 8px; border-radius:10px; margin:4px 4px 0 0; cursor:pointer; font-size: 13px;}
+    .action-row { display: flex; gap: 10px; margin-top: 20px; }
   </style>
 </head>
 <body>
@@ -106,7 +107,7 @@
       <h2>🔍 添加学习内容</h2>
       <p style="font-size:12px;color:#888;margin-bottom:10px;">输入英文/中文，查看完整词性、变形并加入题库</p>
       <div class="search-box">
-        <input id="search-input" placeholder="例如：toilet 或 足球" autocomplete="off">
+        <input id="search-input" placeholder="例如：outfit 或 衣服" autocomplete="off">
         <button onclick="searchAndAdd()">查询</button>
       </div>
       <div id="search-result"></div>
@@ -127,11 +128,15 @@
     </div>
 
     <div id="q-speak-area" style="display:none; text-align:center; margin-top:20px;">
-      <p style="font-size:14px;color:#666;margin-bottom:15px;">点击麦克风，大声读出上方句子</p>
+      <p style="font-size:14px;color:#666;margin-bottom:15px;" id="speak-tip">点击麦克风，大声读出上方句子</p>
       <button class="mic-btn" id="mic-btn" onclick="toggleRecord()">🎙️</button>
     </div>
 
-    <button class="btn btn-outline" style="width:100%; margin-top:20px;" onclick="quitQuiz()">退出训练</button>
+    <!-- 增加跳过按钮 -->
+    <div class="action-row">
+      <button class="btn btn-outline" style="flex:1;" onclick="quitQuiz()">退出</button>
+      <button class="btn btn-outline" style="flex:1; border-color:#ffdfe0; color:#ff4b4b;" onclick="skipQuestion()">跳过本题</button>
+    </div>
   </div>
 
   <!-- 3. 解析反馈区 (弹窗) -->
@@ -208,7 +213,6 @@
       if (lang === 'en') {
         return text.replace(/([a-zA-Z']+)/g, '<span class="clickable-word" onclick="clickWord(event, \'$1\', \'en\')">$1</span>');
       } else {
-        // 使用 Intl.Segmenter 进行智能中文分词
         if (typeof Intl !== 'undefined' && Intl.Segmenter) {
             const segmenter = new Intl.Segmenter('zh', { granularity: 'word' });
             let result = '';
@@ -221,7 +225,6 @@
             }
             return result;
         }
-        // 降级处理
         return text.replace(/([\u4e00-\u9fa5]{2,})/g, '<span class="clickable-word" onclick="clickWord(event, \'$1\', \'zh\')">$1</span>');
       }
     }
@@ -234,11 +237,8 @@
       const cleanWord = word.replace(/[^a-zA-Z\u4e00-\u9fa5]/g, '');
       if(!cleanWord) return;
 
-      if (type === 'en') {
-        speak(cleanWord, 'en-US');
-      } else {
-        speak(cleanWord, 'zh-CN');
-      }
+      if (type === 'en') speak(cleanWord, 'en-US');
+      else speak(cleanWord, 'zh-CN');
 
       let lookupWord = cleanWord.toLowerCase();
       if(lookupWord === "i'm") lookupWord = "i am";
@@ -255,33 +255,46 @@
       try {
         let resultText = "";
         if (type === 'en') {
-          // 英文查中文用有道，获取多义项
+          // 英文查中文 (全量提取)
           try {
             const res = await fetch(`https://dict.youdao.com/jsonapi?q=${encodeURIComponent(lookupWord)}`);
             const data = await res.json();
             if(data.ec && data.ec.word && data.ec.word.trs) {
-               let meanings = [];
+               let parts = [];
                data.ec.word.trs.forEach(tr => {
-                  let pos = tr.pos || '';
+                  let pos = tr.pos ? `<span style="color:#58cc02;">${tr.pos}</span> ` : '';
                   if(tr.tr && tr.tr[0] && tr.tr[0].l && tr.tr[0].l.i) {
-                      meanings.push(`${pos} ${tr.tr[0].l.i.join('; ')}`);
+                      // 提取该项下所有释义
+                      let items = tr.tr[0].l.i.map(i=>i.trim()).filter(i=>i);
+                      if(items.length > 0) {
+                          parts.push(`${pos}${items.join('；')}`);
+                      }
                   }
                });
-               resultText = meanings.join('<br>');
+               if (parts.length > 0) resultText = parts.join('<br>');
             }
           } catch(err) {}
           
           if(!resultText) {
-            // 兜底
             const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(lookupWord)}&langpair=en|zh-CN`);
             const data = await res.json();
             resultText = data.responseData.translatedText;
           }
         } else {
-          // 中文查英文
-          const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(lookupWord)}&langpair=zh-CN|en`);
-          const data = await res.json();
-          resultText = data.responseData.translatedText;
+          // 中文查英文 (优先用有道翻译引擎，其次 MyMemory)
+          try {
+             const res = await fetch(`https://dict.youdao.com/jsonapi?q=${encodeURIComponent(lookupWord)}`);
+             const data = await res.json();
+             if(data.fanyi && data.fanyi.tran) {
+                 resultText = data.fanyi.tran.toLowerCase();
+             }
+          } catch(err) {}
+          
+          if (!resultText) {
+             const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(lookupWord)}&langpair=zh-CN|en`);
+             const data = await res.json();
+             resultText = data.responseData.translatedText.toLowerCase();
+          }
         }
         
         if (!resultText || resultText.toLowerCase() === lookupWord) resultText = "暂无翻译";
@@ -299,13 +312,13 @@
       }
     });
 
-    // ================= 查词与添加 (全能词典) =================
+    // ================= 查词与添加 (全量逻辑) =================
     async function searchAndAdd() {
       const raw = document.getElementById('search-input').value.trim();
       if (!raw) return;
       const resDiv = document.getElementById('search-result');
       resDiv.style.display = 'block';
-      resDiv.innerHTML = '查询中，由于需获取完整词性，可能需要几秒钟...';
+      resDiv.innerHTML = '正在获取完整词性、变形数据，请稍候...';
 
       const isChinese = /[\u4e00-\u9fa5]/.test(raw);
       
@@ -314,26 +327,37 @@
         
         if (isChinese) {
           // 中文搜英文
-          const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(raw)}&langpair=zh-CN|en`);
-          const data = await res.json();
-          
           let enWords = new Set();
-          if (data.responseData && data.responseData.translatedText) enWords.add(data.responseData.translatedText.toLowerCase());
-          if (data.matches) data.matches.forEach(m => { if (m.translation && m.translation.length > 1) enWords.add(m.translation.toLowerCase()); });
+          
+          // 1. 有道翻译结果 (对于衣服这类日常词很准)
+          try {
+             const yRes = await fetch(`https://dict.youdao.com/jsonapi?q=${encodeURIComponent(raw)}`);
+             const yData = await yRes.json();
+             if(yData.fanyi && yData.fanyi.tran) {
+                 enWords.add(yData.fanyi.tran.toLowerCase());
+             }
+          } catch(e) {}
+          
+          // 2. MyMemory 补充同义词
+          try {
+             const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(raw)}&langpair=zh-CN|en`);
+             const data = await res.json();
+             if (data.responseData && data.responseData.translatedText) enWords.add(data.responseData.translatedText.toLowerCase());
+             if (data.matches) data.matches.forEach(m => { if (m.translation && m.translation.length > 1) enWords.add(m.translation.toLowerCase()); });
+          } catch(e) {}
           
           if (enWords.size === 0) throw new Error('Not found');
 
-          resultHtml = `<div style="margin-bottom:8px;">✅ 找到以下表达（已统一下写）：</div>`;
+          resultHtml = `<div style="margin-bottom:8px;">✅ 找到以下对应表达：</div>`;
           
-          // 限制最多查前4个，避免请求过多卡死
-          const wordsToFetch = Array.from(enWords).slice(0, 4);
+          const wordsToFetch = Array.from(enWords).slice(0, 5);
           
           for (let i = 0; i < wordsToFetch.length; i++) {
             const enText = wordsToFetch[i];
             let posHtml = '';
             let wfsHtml = '';
             
-            // 二次请求有道，获取这个英文词的词性和变形
+            // 获取英文词的完整信息
             try {
               const yRes = await fetch(`https://dict.youdao.com/jsonapi?q=${encodeURIComponent(enText)}`);
               const yData = await yRes.json();
@@ -382,9 +406,14 @@
             `;
           }
         } else {
-          // 英文搜中文 (使用有道全量数据)
-          const res = await fetch(`https://dict.youdao.com/jsonapi?q=${encodeURIComponent(raw)}`);
-          const data = await res.json();
+          // 英文搜中文 (全量抓取)
+          let data = null;
+          try {
+            const res = await fetch(`https://dict.youdao.com/jsonapi?q=${encodeURIComponent(raw)}`);
+            data = await res.json();
+          } catch(e) {
+             throw new Error('网络问题，请重试');
+          }
           
           let meaningsHtml = '';
           let finalZhArr = [];
@@ -395,15 +424,27 @@
               let pos = tr.pos || ''; 
               if(pos) posSet.add(pos);
               if (tr.tr && tr.tr[0] && tr.tr[0].l && tr.tr[0].l.i) {
-                let meaning = tr.tr[0].l.i.join('; ');
-                meaningsHtml += `<div style="margin-bottom:4px;"><span class="dict-pos">${pos}</span>${meaning}</div>`;
-                finalZhArr.push(meaning);
+                // 取该词性下的所有释义
+                let items = tr.tr[0].l.i.map(i => i.trim()).filter(i => i);
+                if(items.length > 0) {
+                   let meaningStr = items.join('；');
+                   meaningsHtml += `<div style="margin-bottom:6px;"><span class="dict-pos">${pos}</span>${meaningStr}</div>`;
+                   finalZhArr.push(meaningStr);
+                }
               }
             });
           }
 
+          if (finalZhArr.length === 0) {
+             const fallbackRes = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(raw)}&langpair=en|zh-CN`);
+             const fallbackData = await fallbackRes.json();
+             let fbZh = fallbackData.responseData.translatedText;
+             meaningsHtml = `<div style="margin-bottom:4px;"><span class="dict-pos">释义</span>${fbZh}</div>`;
+             finalZhArr.push(fbZh);
+          }
+
           let wfsHtml = '';
-          if (data.ec && data.ec.word && data.ec.word.wfs) {
+          if (data && data.ec && data.ec.word && data.ec.word.wfs) {
             wfsHtml = `<div style="margin-top:8px;"><b>词形变化：</b><br>`;
             data.ec.word.wfs.forEach(wf => {
               wfsHtml += `<span class="dict-wf" onclick="speak('${wf.wf.value}')">${wf.wf.name}: ${wf.wf.value} 🔊</span>`;
@@ -412,7 +453,7 @@
           }
           
           let synonymsHtml = '';
-          if (data.syno && data.syno.synos) {
+          if (data && data.syno && data.syno.synos) {
             synonymsHtml = `<div style="margin-top:8px;"><b>近义词：</b><br>`;
             data.syno.synos.slice(0, 6).forEach(s => {
               synonymsHtml += `<span class="dict-syn" onclick="speak('${s.word}')">${s.word} 🔊</span>`;
@@ -420,8 +461,6 @@
             synonymsHtml += `</div>`;
           }
 
-          if (finalZhArr.length === 0) finalZhArr.push('暂无中文释义');
-          
           const enLower = raw.toLowerCase();
           const newItem = {
             id: Date.now(),
@@ -479,6 +518,10 @@
       localStorage.setItem('wrong_questions', JSON.stringify(wrongQuestions));
       showQuiz();
       loadQuestion();
+    }
+
+    function skipQuestion() {
+      nextQuestion();
     }
 
     function loadQuestion() {
@@ -578,6 +621,17 @@
       document.getElementById('q-input-area').style.display = 'none';
       document.getElementById('q-speak-area').style.display = 'block';
       
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const micBtn = document.getElementById('mic-btn');
+      const tip = document.getElementById('speak-tip');
+      if (!SpeechRecognition) {
+        micBtn.style.display = 'none';
+        tip.innerHTML = '<span style="color:#ff4b4b;">当前设备不支持语音识别</span><br>请自己朗读并点击下方“跳过本题”';
+      } else {
+        micBtn.style.display = 'flex';
+        tip.innerHTML = '点击麦克风，大声读出上方句子';
+      }
+      
       setTimeout(() => speak(currentQ.en), 300);
     }
 
@@ -586,8 +640,7 @@
       const val = document.getElementById('q-input').value.trim().toLowerCase();
       if (!val) return;
       const correct = currentQ.en.toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()]/g,"");
-      const user = val.replace(/[.,/#!$%^&*;:{}=\-_`~()]/g,"").replace(/\s+/g, ' '); // 忽略多余空格
-      // 处理缩写不带撇号的情况
+      const user = val.replace(/[.,/#!$%^&*;:{}=\-_`~()]/g,"").replace(/\s+/g, ' '); 
       const userNoApos = user.replace(/'/g, '');
       const correctNoApos = correct.replace(/'/g, '');
       
@@ -599,9 +652,7 @@
     let isRecording = false;
     function toggleRecord() {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SpeechRecognition) {
-        return alert('当前浏览器不支持语音识别。建议在安卓版 Chrome 或电脑 Chrome 中使用。');
-      }
+      if (!SpeechRecognition) return; 
 
       if (isRecording) {
         recognition.stop();
@@ -628,7 +679,7 @@
       };
 
       recognition.onerror = () => {
-        alert('录音失败，请检查麦克风权限。');
+        alert('录音失败，可能是麦克风权限未开启，或浏览器不支持。');
         stopRecordUI();
       };
 
